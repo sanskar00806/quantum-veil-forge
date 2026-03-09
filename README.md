@@ -8,6 +8,13 @@
 
 There are several ways of editing your application.
 
+###cmd to execute
+
+python -m venv venv     
+venv\Scripts\activate  
+cd backend
+pip install -r requirements.txt
+
 **Use Lovable**
 
 Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
