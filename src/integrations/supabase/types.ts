@@ -263,6 +263,36 @@ export type Database = {
         }
         Relationships: []
       }
+      transmissions: {
+        Row: {
+          algorithm: string | null
+          created_at: string | null
+          id: string
+          image_url: string
+          is_read: boolean | null
+          recipient_username: string
+          sender_id: string
+        }
+        Insert: {
+          algorithm?: string | null
+          created_at?: string | null
+          id?: string
+          image_url: string
+          is_read?: boolean | null
+          recipient_username: string
+          sender_id: string
+        }
+        Update: {
+          algorithm?: string | null
+          created_at?: string | null
+          id?: string
+          image_url?: string
+          is_read?: boolean | null
+          recipient_username?: string
+          sender_id?: string
+        }
+        Relationships: []
+      }
       usage_statistics: {
         Row: {
           created_at: string

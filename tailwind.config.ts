@@ -14,8 +14,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "sans-serif"],
-        mono: ["JetBrains Mono", "monospace"],
+        sans: ['"Rajdhani"', 'sans-serif'],
+        mono: ['"Share Tech Mono"', 'monospace'],
+        display: ['"Rajdhani"', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -51,6 +52,9 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        "neon-cyan": "hsl(var(--neon-cyan))",
+        "neon-magenta": "hsl(var(--neon-magenta))",
+        "neon-green": "hsl(var(--neon-green))",
         violet: {
           DEFAULT: "hsl(var(--violet))",
           glow: "hsl(var(--violet-glow))",
