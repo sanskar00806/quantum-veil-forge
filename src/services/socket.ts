@@ -1,96 +1,63 @@
-import { io, Socket } from "socket.io-client";
+// Socket-like real-time communication using Supabase Realtime
+// This module wraps Supabase channels to provide a socket-like API
 import { supabase } from "@/integrations/supabase/client";
 
-let socket: Socket | null = null;
+let presenceChannel: ReturnType<typeof supabase.channel> | null = null;
 
-export const initSocket = () => {
-  if (socket) return socket;
+export const initSocket = async () => {
+  if (presenceChannel) return presenceChannel;
 
-  // Get the current user's token for authentication
-  const connectSocket = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    socket = io("http://localhost:8000", {
-      auth: {
-        token: session?.access_token,
-      },
-      transports: ["websocket"],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
 
-    socket.on("connect", () => {
-      console.log("Socket connected:", socket?.id);
-    });
+  presenceChannel = supabase.channel('global-presence', {
+    config: { presence: { key: session.user.id } }
+  });
 
-    socket.on("disconnect", () => {
-      console.log("Socket disconnected");
-    });
+  presenceChannel.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await presenceChannel!.track({ user_id: session.user.id, online: true });
+      console.log("Realtime presence connected");
+    }
+  });
 
-    socket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
-    });
-
-    return socket;
-  };
-
-  return connectSocket();
+  return presenceChannel;
 };
 
-export const getSocket = () => socket;
+export const getSocket = () => presenceChannel;
 
 export const disconnectSocket = () => {
-  if (socket) {
-    socket.disconnect();
-    socket = null;
+  if (presenceChannel) {
+    supabase.removeChannel(presenceChannel);
+    presenceChannel = null;
   }
 };
 
-// Chat-specific socket functions
+// Chat-specific functions using Supabase Realtime
 export const joinChatRoom = (roomId: string) => {
-  if (!socket) return;
-  socket.emit("join_room", roomId);
+  return supabase.channel(`room:${roomId}`).subscribe();
 };
 
 export const leaveChatRoom = (roomId: string) => {
-  if (!socket) return;
-  socket.emit("leave_room", roomId);
+  const channel = supabase.channel(`room:${roomId}`);
+  supabase.removeChannel(channel);
 };
 
-export const sendSocketMessage = (data: {
-  roomId: string;
-  sender_id: string;
-  receiver_id: string;
-  text?: string;
-  image_url?: string;
-}) => {
-  if (!socket) return;
-  socket.emit("send_message", data);
-};
-
-export const onNewMessage = (callback: (message: any) => void) => {
-  if (!socket) return;
-  socket.on("new_message", callback);
-};
-
-export const offNewMessage = (callback: (message: any) => void) => {
-  if (!socket) return;
-  socket.off("new_message", callback);
-};
-
-// Online status
 export const updateUserStatus = (status: "online" | "offline") => {
-  if (!socket) return;
-  socket.emit("update_status", { status });
+  if (!presenceChannel) return;
+  presenceChannel.track({ online: status === "online" });
 };
 
 export const onUserStatusChange = (callback: (data: { userId: string; status: string }) => void) => {
-  if (!socket) return;
-  socket.on("user_status", callback);
+  if (!presenceChannel) return;
+  presenceChannel.on('presence', { event: 'sync' }, () => {
+    const state = presenceChannel!.presenceState();
+    Object.keys(state).forEach(userId => {
+      callback({ userId, status: 'online' });
+    });
+  });
 };
 
-export const offUserStatusChange = (callback: (data: { userId: string; status: string }) => void) => {
-  if (!socket) return;
-  socket.off("user_status", callback);
+export const offUserStatusChange = (_callback: (data: { userId: string; status: string }) => void) => {
+  // Supabase handles cleanup via removeChannel
 };

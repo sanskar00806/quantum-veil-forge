@@ -93,14 +93,14 @@ const Index = () => {
 
       // Create vault item record
       const { error: dbError } = await supabase
-        .from('vault_items')
+        .from('encrypted_files')
         .insert({
           user_id: user.id,
-          file_name: `encoded_${file.name}`,
-          file_url: fileName,
-          encryption_method: 'AES-256+LSB',
-          file_size: encodedBlob.size,
-          original_file_name: file.name
+          title: `encoded_${file.name}`,
+          encrypted_file_url: fileName,
+          encryption_method: 'lsb' as const,
+          file_size_bytes: encodedBlob.size,
+          file_type: 'image' as const,
         });
 
       if (dbError) throw dbError;
