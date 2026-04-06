@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 import { Send, Image as ImageIcon, X } from "lucide-react";
 import { useChatStore } from "@/hooks/useChatStore";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 const MessageInput = () => {
   const [text, setText] = useState("");
@@ -31,9 +33,35 @@ const MessageInput = () => {
     if (!text.trim() && !imagePreview) return;
 
     try {
+      // Upload image to storage if present
+      let imageUrl: string | undefined = undefined;
+      
+      if (imagePreview) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const file = await fetch(imagePreview).then(r => r.blob());
+        const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('chat-images')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('chat-images')
+          .getPublicUrl(fileName);
+
+        imageUrl = urlData.publicUrl;
+      }
+
       await sendMessage({
         text: text.trim(),
-        image_url: imagePreview || undefined,
+        image_url: imageUrl,
       });
 
       setText("");
@@ -41,6 +69,11 @@ const MessageInput = () => {
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
       console.error("Failed to send message:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
