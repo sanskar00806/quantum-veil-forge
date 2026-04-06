@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Shield, LayoutDashboard, Lock, Unlock, Archive, Settings, ChevronLeft, ChevronRight, Fingerprint, LogOut } from "lucide-react";
+import { Shield, LayoutDashboard, Lock, Unlock, Archive, Settings, ChevronLeft, ChevronRight, Fingerprint, LogOut, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,6 +9,7 @@ const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Encode", url: "/encode", icon: Lock },
   { title: "Decode", url: "/decode", icon: Unlock },
+  { title: "Chat", url: "/chat", icon: MessageSquare },
   { title: "Vault", url: "/vault", icon: Archive },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
