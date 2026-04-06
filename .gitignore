@@ -1,19 +1,22 @@
-```
+```gitignore
 # Dependencies
 node_modules/
 
 # Build outputs
 dist/
 build/
-*.js.map
-*.tsbuildinfo
+.next/
+.nuxt/
+public/dist/
+*.bundle.js
+*.bundle.css
 
-# Environment
+# Environment variables
 .env
 .env.local
-.env.*
+*.env.*
 
-# Editors
+# IDE files
 .vscode/
 .idea/
 *.swp
@@ -22,13 +25,48 @@ build/
 # Logs
 *.log
 
-# Python (if applicable)
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-venv/
-.venv/
-.env
+*.so
+*.egg-info/
+.eggs/
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
