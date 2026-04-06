@@ -133,6 +133,42 @@ export type Database = {
           },
         ]
       }
+      messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          receiver_id: string | null
+          role: string | null
+          room_id: string
+          sender_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          receiver_id?: string | null
+          role?: string | null
+          room_id: string
+          sender_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          receiver_id?: string | null
+          role?: string | null
+          room_id?: string
+          sender_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -238,6 +274,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           display_name: string | null
+          full_name: string | null
           id: string
           updated_at: string
           user_id: string
@@ -247,6 +284,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
+          full_name?: string | null
           id?: string
           updated_at?: string
           user_id: string
@@ -256,6 +294,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
+          full_name?: string | null
           id?: string
           updated_at?: string
           user_id?: string
@@ -350,6 +389,54 @@ export type Database = {
         }
         Relationships: []
       }
+      user_settings: {
+        Row: {
+          backup_frequency: string | null
+          compress_images: boolean | null
+          created_at: string | null
+          email_search_enabled: boolean | null
+          font_size: string | null
+          id: string
+          max_file_size: number | null
+          session_timeout: number | null
+          theme: string | null
+          theme_color: string | null
+          two_factor_auth: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          backup_frequency?: string | null
+          compress_images?: boolean | null
+          created_at?: string | null
+          email_search_enabled?: boolean | null
+          font_size?: string | null
+          id?: string
+          max_file_size?: number | null
+          session_timeout?: number | null
+          theme?: string | null
+          theme_color?: string | null
+          two_factor_auth?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          backup_frequency?: string | null
+          compress_images?: boolean | null
+          created_at?: string | null
+          email_search_enabled?: boolean | null
+          font_size?: string | null
+          id?: string
+          max_file_size?: number | null
+          session_timeout?: number | null
+          theme?: string | null
+          theme_color?: string | null
+          two_factor_auth?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -361,6 +448,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      search_user_by_email: {
+        Args: { search_email: string }
+        Returns: {
+          avatar_url: string
+          email: string
+          full_name: string
+          id: string
+        }[]
       }
     }
     Enums: {
