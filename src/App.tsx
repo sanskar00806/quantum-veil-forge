@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppSidebar } from "@/components/AppSidebar";
+import { ParticleBackground } from "@/components/ParticleBackground";
 import Dashboard from "./pages/Dashboard";
 import Index from "./pages/Index";
 import Decode from "./pages/Decode";
@@ -18,9 +19,9 @@ const queryClient = new QueryClient();
 
 const ProtectedLayout = ({ children }: { children: React.ReactNode }) => (
   <ProtectedRoute>
-    <div className="flex min-h-screen w-full">
+    <div className="flex min-h-screen w-full relative">
       <AppSidebar />
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 relative z-10">{children}</div>
     </div>
   </ProtectedRoute>
 );
@@ -32,6 +33,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <ParticleBackground />
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
