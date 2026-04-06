@@ -7,51 +7,47 @@ node_modules/
 .env.local
 .env.*
 
-# Build artifacts
-dist/
-build/
-*.js.map
-
-# Editors
-.vscode/
-.idea/
-
-# Logs and temp files
+# Logs
 *.log
-*.tmp
-*.swp
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Compiled files
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
-
-# OS generated files
-.DS_Store
-Thumbs.db
 
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Cache directories
-.mypy_cache/
-.pytest_cache/
-.gradle/
+# Build artifacts
+dist/
+build/
 target/
+*.out
 
-# Compressed files
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.eggs/
+egg-info/
+*.egg-info/
+.venv/
+venv/
+env/
+ENV/
+
+# Compiled and binary files
+*.class
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.obj
+*.out
+
+# Compression
 *.zip
 *.gz
 *.tar
@@ -70,4 +66,21 @@ target/
 *.Z
 *.lz
 *.lzo
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# System
+.DS_Store
+Thumbs.db
+
+# Testing
+.mypy_cache/
+.pytest_cache/
+.nyc_output/
+coverage.xml
 ```
