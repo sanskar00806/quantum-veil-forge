@@ -73,7 +73,7 @@ export function ParticleBackground() {
         particle.opacity -= 0.0015;
 
         // Add twinkle effect
-        particle.size += Math.sin(time * 5 + index) * 0.05;
+        particle.size = Math.max(0.1, particle.size + Math.sin(time * 5 + index) * 0.05);
 
         if (particle.y < -10 || particle.opacity <= 0) {
           particle.y = canvas.height + 10;

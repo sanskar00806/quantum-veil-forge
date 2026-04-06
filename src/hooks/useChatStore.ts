@@ -5,7 +5,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 export interface Message {
   id: string;
   sender_id: string;
-  receiver_id: string;
+  receiver_id: string | null;
   text?: string;
   image_url?: string;
   created_at: string;
@@ -19,6 +19,11 @@ export interface ChatUser {
   is_online?: boolean;
 }
 
+// Helper to create a deterministic room_id from two user IDs
+function getRoomId(userA: string, userB: string): string {
+  return [userA, userB].sort().join("_");
+}
+
 interface ChatState {
   messages: Message[];
   contacts: ChatUser[];
@@ -30,7 +35,6 @@ interface ChatState {
   messageChannel: RealtimeChannel | null;
   presenceChannel: RealtimeChannel | null;
   
-  // Actions
   getCurrentUser: () => Promise<void>;
   getContacts: () => Promise<void>;
   getMessages: (userId: string) => Promise<void>;
@@ -74,24 +78,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get all other users as potential contacts
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, email, full_name, avatar_url")
-        .neq("id", user.id);
+        .select("user_id, email, full_name, avatar_url")
+        .neq("user_id", user.id);
 
       if (error) throw error;
       
       set({ 
         contacts: (data || []).map(profile => ({
-          id: profile.id,
-          email: profile.email,
-          full_name: profile.full_name,
-          avatar_url: profile.avatar_url,
-          is_online: get().onlineUsers.includes(profile.id),
+          id: profile.user_id,
+          email: profile.email || "",
+          full_name: profile.full_name || undefined,
+          avatar_url: profile.avatar_url || undefined,
+          is_online: get().onlineUsers.includes(profile.user_id),
         }))
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error fetching contacts:", error);
     } finally {
       set({ isUsersLoading: false });
@@ -104,10 +107,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      const roomId = getRoomId(user.id, userId);
+
       const { data, error } = await supabase
         .from("messages")
         .select("*")
-        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`)
+        .eq("room_id", roomId)
         .order("created_at", { ascending: true });
 
       if (error) throw error;
@@ -117,12 +122,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           id: msg.id,
           sender_id: msg.sender_id,
           receiver_id: msg.receiver_id,
-          text: msg.text,
-          image_url: msg.image_url,
-          created_at: msg.created_at,
+          text: msg.content,
+          created_at: msg.created_at || new Date().toISOString(),
         }))
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error fetching messages:", error);
     } finally {
       set({ isMessagesLoading: false });
@@ -137,14 +141,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      let imageUrl = messageData.image_url;
+      let content = messageData.text || "";
 
       // Upload image if file is provided
       if (messageData.file) {
         const fileExt = messageData.file.name.split('.').pop();
         const fileName = `${user.id}_${selectedUser.id}_${Date.now()}.${fileExt}`;
         
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('chat-images')
           .upload(fileName, messageData.file, {
             cacheControl: '3600',
@@ -153,40 +157,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         if (uploadError) throw uploadError;
 
-        // Get public URL
         const { data: { publicUrl } } = supabase.storage
           .from('chat-images')
           .getPublicUrl(fileName);
 
-        imageUrl = publicUrl;
+        content = content ? `${content}\n[image:${publicUrl}]` : `[image:${publicUrl}]`;
       }
 
-      // Insert message to database
+      if (!content.trim()) return;
+
+      const roomId = getRoomId(user.id, selectedUser.id);
+
       const { data, error } = await supabase
         .from("messages")
-        .insert({
+        .insert([{
           sender_id: user.id,
           receiver_id: selectedUser.id,
-          text: messageData.text,
-          image_url: imageUrl,
-        })
+          user_id: user.id,
+          room_id: roomId,
+          content: content,
+        }])
         .select()
         .single();
 
       if (error) throw error;
 
-      // Add to local state immediately
-      set({ 
-        messages: [...get().messages, {
+      if (data) {
+        const newMsg: Message = {
           id: data.id,
           sender_id: data.sender_id,
           receiver_id: data.receiver_id,
-          text: data.text,
-          image_url: data.image_url,
-          created_at: data.created_at,
-        }]
-      });
-    } catch (error: any) {
+          text: data.content,
+          created_at: data.created_at || new Date().toISOString(),
+        };
+        set({ messages: [...get().messages, newMsg] });
+      }
+    } catch (error) {
       console.error("Error sending message:", error);
       throw error;
     }
@@ -195,10 +201,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSelectedUser: (selectedUser) => {
     set({ selectedUser, messages: [] });
     
-    // Load messages for selected user
     if (selectedUser) {
       get().getMessages(selectedUser.id);
-      // Subscribe to realtime updates for this conversation
       setTimeout(() => get().subscribeToMessages(), 100);
     }
   },
@@ -207,36 +211,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { selectedUser, currentUserId, messageChannel } = get();
     if (!selectedUser || !currentUserId) return;
 
-    // Unsubscribe from previous channel
     if (messageChannel) {
       supabase.removeChannel(messageChannel);
     }
 
-    // Subscribe to new messages with realtime
+    const roomId = getRoomId(currentUserId, selectedUser.id);
+
     const channel = supabase
-      .channel(`chat:${currentUserId}:${selectedUser.id}`)
+      .channel(`chat:${roomId}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "messages",
-          filter: `or(and(sender_id.eq.${currentUserId},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${currentUserId}))`,
+          filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
-          const newMessage = payload.new as Message;
-          // Only add if not already in list
+          const raw = payload.new as any;
+          const newMessage: Message = {
+            id: raw.id,
+            sender_id: raw.sender_id,
+            receiver_id: raw.receiver_id,
+            text: raw.content,
+            created_at: raw.created_at || new Date().toISOString(),
+          };
           const exists = get().messages.some(m => m.id === newMessage.id);
           if (!exists) {
             set({ messages: [...get().messages, newMessage] });
           }
         }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to messages channel');
-        }
-      });
+      .subscribe();
 
     set({ messageChannel: channel });
   },
@@ -256,39 +262,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const channel = supabase.channel('presence:chat', {
-      config: {
-        presence: {
-          key: 'user_id'
-        }
-      }
-    })
-    .on('system', { event: '*' }, (payload) => {
-      console.log('System event:', payload);
+      config: { presence: { key: 'user_id' } }
     })
     .on('presence', { event: 'sync' }, () => {
       const state = channel.presenceState();
       const onlineUserIds = Object.keys(state);
       set({ onlineUsers: onlineUserIds });
       
-      // Update contacts with online status
       const { contacts } = get();
-      const updatedContacts = contacts.map(contact => ({
-        ...contact,
-        is_online: onlineUserIds.includes(contact.id)
-      }));
-      set({ contacts: updatedContacts });
+      set({ contacts: contacts.map(c => ({ ...c, is_online: onlineUserIds.includes(c.id) })) });
     })
-    .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-      console.log('User joined:', key, newPresences);
+    .on('presence', { event: 'join' }, ({ key }) => {
       const { onlineUsers } = get();
       if (!onlineUsers.includes(key)) {
         set({ onlineUsers: [...onlineUsers, key] });
       }
     })
-    .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-      console.log('User left:', key, leftPresences);
-      const { onlineUsers } = get();
-      set({ onlineUsers: onlineUsers.filter(id => id !== key) });
+    .on('presence', { event: 'leave' }, ({ key }) => {
+      set({ onlineUsers: get().onlineUsers.filter(id => id !== key) });
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
@@ -305,49 +296,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setOnlineUsers: (userIds) => set({ onlineUsers: userIds }),
 
   addMessage: (message: Message) => {
-    const exists = get().messages.some(m => m.id === message.id);
-    if (!exists) {
+    if (!get().messages.some(m => m.id === message.id)) {
       set({ messages: [...get().messages, message] });
     }
   },
 
   updateUserOnlineStatus: (userId: string, isOnline: boolean) => {
     const { contacts, onlineUsers } = get();
-    
-    // Update online users list
     const newOnlineUsers = isOnline 
       ? [...new Set([...onlineUsers, userId])]
       : onlineUsers.filter(id => id !== userId);
     
-    set({ onlineUsers: newOnlineUsers });
-    
-    // Update contact's online status
-    const updatedContacts = contacts.map(contact => 
-      contact.id === userId ? { ...contact, is_online: isOnline } : contact
-    );
-    
-    set({ contacts: updatedContacts });
+    set({ 
+      onlineUsers: newOnlineUsers,
+      contacts: contacts.map(c => c.id === userId ? { ...c, is_online: isOnline } : c)
+    });
   },
 
   addContactByEmail: async (user: ChatUser) => {
     const { contacts } = get();
-    // Add to contacts list (it's already there from getContacts, but this ensures it's refreshed)
-    const exists = contacts.some(c => c.id === user.id);
-    if (!exists) {
+    if (!contacts.some(c => c.id === user.id)) {
       set({ contacts: [...contacts, user] });
     }
-    // Refresh contacts list
     await get().getContacts();
   },
 
   cleanup: () => {
     const { messageChannel, presenceChannel } = get();
-    if (messageChannel) {
-      supabase.removeChannel(messageChannel);
-    }
-    if (presenceChannel) {
-      supabase.removeChannel(presenceChannel);
-    }
+    if (messageChannel) supabase.removeChannel(messageChannel);
+    if (presenceChannel) supabase.removeChannel(presenceChannel);
     set({ messageChannel: null, presenceChannel: null });
   },
 }));
