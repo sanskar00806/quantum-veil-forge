@@ -146,26 +146,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { selectedUser } = get();
     if (!selectedUser) return;
 
-    const channel = supabase
-      .channel(`chat:${selectedUser.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `receiver_id=eq.${supabase.auth.getUser().then(({ data }) => data?.user?.id)}`,
-        },
-        (payload) => {
-          const newMessage = payload.new as Message;
-          set({ messages: [...get().messages, newMessage] });
-        }
-      )
-      .subscribe();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      const channel = supabase
+        .channel(`chat:${selectedUser.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `receiver_id=eq.${user.id}`,
+          },
+          (payload) => {
+            const newMessage = payload.new as Message;
+            set({ messages: [...get().messages, newMessage] });
+          }
+        )
+        .subscribe();
+    });
   },
 
   unsubscribeFromMessages: () => {
