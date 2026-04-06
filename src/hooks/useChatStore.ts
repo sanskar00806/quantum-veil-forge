@@ -1,18 +1,6 @@
 import { create } from "zustand";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  initSocket, 
-  getSocket, 
-  disconnectSocket,
-  joinChatRoom, 
-  leaveChatRoom,
-  sendSocketMessage,
-  onNewMessage,
-  offNewMessage,
-  updateUserStatus,
-  onUserStatusChange,
-  offUserStatusChange,
-} from "@/services/socket";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 export interface Message {
   id: string;
@@ -38,20 +26,23 @@ interface ChatState {
   isMessagesLoading: boolean;
   isUsersLoading: boolean;
   onlineUsers: string[];
-  socketInitialized: boolean;
+  currentUserId: string | null;
+  messageChannel: RealtimeChannel | null;
+  presenceChannel: RealtimeChannel | null;
   
   // Actions
-  initializeSocket: () => Promise<void>;
+  getCurrentUser: () => Promise<void>;
   getUsers: () => Promise<void>;
   getMessages: (userId: string) => Promise<void>;
-  sendMessage: (messageData: { text?: string; image_url?: string }) => Promise<void>;
-  sendSocketMessage: (messageData: { text?: string; image_url?: string }) => void;
+  sendMessage: (messageData: { text?: string; image_url?: string; file?: File }) => Promise<void>;
   setSelectedUser: (user: ChatUser | null) => void;
   subscribeToMessages: () => void;
   unsubscribeFromMessages: () => void;
+  setupPresenceSubscription: () => void;
   setOnlineUsers: (userIds: string[]) => void;
   addMessage: (message: Message) => void;
   updateUserOnlineStatus: (userId: string, isOnline: boolean) => void;
+  cleanup: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -61,41 +52,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isMessagesLoading: false,
   isUsersLoading: false,
   onlineUsers: [],
-  socketInitialized: false,
+  currentUserId: null,
+  messageChannel: null,
+  presenceChannel: null,
 
-  initializeSocket: async () => {
-    if (get().socketInitialized) return;
-    
+  getCurrentUser: async () => {
     try {
-      await initSocket();
-      const socket = getSocket();
-      
-      if (socket) {
-        set({ socketInitialized: true });
-        
-        // Listen for new messages via socket
-        onNewMessage(async (newMessage: Message) => {
-          const { selectedUser } = get();
-          const { data: { user } } = await supabase.auth.getUser();
-          
-          // Only add message if it's part of the current conversation
-          if (selectedUser && 
-              ((newMessage.sender_id === user?.id && newMessage.receiver_id === selectedUser.id) ||
-               (newMessage.sender_id === selectedUser.id && newMessage.receiver_id === user?.id))) {
-            set({ messages: [...get().messages, newMessage] });
-          }
-        });
-        
-        // Listen for user status changes
-        onUserStatusChange(({ userId, status }) => {
-          get().updateUserOnlineStatus(userId, status === "online");
-        });
-        
-        // Update own status to online
-        updateUserStatus("online");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        set({ currentUserId: user.id });
       }
     } catch (error) {
-      console.error("Failed to initialize socket:", error);
+      console.error("Error getting current user:", error);
     }
   },
 
@@ -159,13 +127,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (messageData: { text?: string; image_url?: string }) => {
+  sendMessage: async (messageData: { text?: string; image_url?: string; file?: File }) => {
     const { selectedUser } = get();
     if (!selectedUser) return;
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      let imageUrl = messageData.image_url;
+
+      // Upload image if file is provided
+      if (messageData.file) {
+        const fileExt = messageData.file.name.split('.').pop();
+        const fileName = `${user.id}_${selectedUser.id}_${Date.now()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('chat-images')
+          .upload(fileName, messageData.file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('chat-images')
+          .getPublicUrl(fileName);
+
+        imageUrl = publicUrl;
+      }
 
       // Insert message to database
       const { data, error } = await supabase
@@ -174,7 +166,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           sender_id: user.id,
           receiver_id: selectedUser.id,
           text: messageData.text,
-          image_url: messageData.image_url,
+          image_url: imageUrl,
         })
         .select()
         .single();
@@ -192,98 +184,118 @@ export const useChatStore = create<ChatState>((set, get) => ({
           created_at: data.created_at,
         }]
       });
-
-      // Also emit via socket for real-time delivery
-      const socket = getSocket();
-      if (socket && get().socketInitialized) {
-        const roomId = [user.id, selectedUser.id].sort().join("_");
-        sendSocketMessage({
-          roomId,
-          sender_id: user.id,
-          receiver_id: selectedUser.id,
-          text: messageData.text,
-          image_url: messageData.image_url,
-        });
-      }
     } catch (error: any) {
       console.error("Error sending message:", error);
+      throw error;
     }
-  },
-
-  sendSocketMessage: (messageData: { text?: string; image_url?: string }) => {
-    const { selectedUser } = get();
-    if (!selectedUser) return;
-    
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
-      
-      const socket = getSocket();
-      if (socket && get().socketInitialized) {
-        const roomId = [user.id, selectedUser.id].sort().join("_");
-        sendSocketMessage({
-          roomId,
-          sender_id: user.id,
-          receiver_id: selectedUser.id,
-          text: messageData.text,
-          image_url: messageData.image_url,
-        });
-      }
-    });
   },
 
   setSelectedUser: (selectedUser) => {
-    // Leave previous room if exists
-    const prevUser = get().selectedUser;
-    if (prevUser) {
-      const prevRoomId = [prevUser.id, (get() as any).userId].sort().join("_");
-      leaveChatRoom(prevRoomId);
-    }
+    set({ selectedUser, messages: [] });
     
-    set({ selectedUser });
-    
-    // Join new room
+    // Load messages for selected user
     if (selectedUser) {
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (!user) return;
-        const roomId = [user.id, selectedUser.id].sort().join("_");
-        joinChatRoom(roomId);
-      });
+      get().getMessages(selectedUser.id);
     }
   },
 
   subscribeToMessages: () => {
-    const { selectedUser } = get();
-    if (!selectedUser) return;
+    const { selectedUser, currentUserId, messageChannel } = get();
+    if (!selectedUser || !currentUserId) return;
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
+    // Unsubscribe from previous channel
+    if (messageChannel) {
+      supabase.removeChannel(messageChannel);
+    }
 
-      // Supabase realtime subscription as backup
-      const channel = supabase
-        .channel(`chat:${selectedUser.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
-            filter: `receiver_id=eq.${user.id}`,
-          },
-          (payload) => {
-            const newMessage = payload.new as Message;
-            // Only add if not already added via socket
-            const exists = get().messages.some(m => m.id === newMessage.id);
-            if (!exists) {
-              set({ messages: [...get().messages, newMessage] });
-            }
+    // Subscribe to new messages
+    const channel = supabase
+      .channel(`chat:${currentUserId}:${selectedUser.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `or(and(sender_id.eq.${currentUserId},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${currentUserId}))`,
+        },
+        (payload) => {
+          const newMessage = payload.new as Message;
+          // Only add if not already in list
+          const exists = get().messages.some(m => m.id === newMessage.id);
+          if (!exists) {
+            set({ messages: [...get().messages, newMessage] });
           }
-        )
-        .subscribe();
-    });
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to messages channel');
+        }
+      });
+
+    set({ messageChannel: channel });
   },
 
   unsubscribeFromMessages: () => {
-    supabase.removeAllChannels();
+    const { messageChannel } = get();
+    if (messageChannel) {
+      supabase.removeChannel(messageChannel);
+      set({ messageChannel: null });
+    }
+  },
+
+  setupPresenceSubscription: () => {
+    const { presenceChannel } = get();
+    if (presenceChannel) {
+      supabase.removeChannel(presenceChannel);
+    }
+
+    const channel = supabase.channel('presence:chat', {
+      config: {
+        presence: {
+          key: 'user_id'
+        }
+      }
+    })
+    .on('system', { event: '*' }, (payload) => {
+      console.log('System event:', payload);
+    })
+    .on('presence', { event: 'sync' }, () => {
+      const state = channel.presenceState();
+      const onlineUserIds = Object.keys(state);
+      set({ onlineUsers: onlineUserIds });
+      
+      // Update users with online status
+      const { users } = get();
+      const updatedUsers = users.map(user => ({
+        ...user,
+        is_online: onlineUserIds.includes(user.id)
+      }));
+      set({ users: updatedUsers });
+    })
+    .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+      console.log('User joined:', key, newPresences);
+      const { onlineUsers } = get();
+      if (!onlineUsers.includes(key)) {
+        set({ onlineUsers: [...onlineUsers, key] });
+      }
+    })
+    .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+      console.log('User left:', key, leftPresences);
+      const { onlineUsers } = get();
+      set({ onlineUsers: onlineUsers.filter(id => id !== key) });
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        const { currentUserId } = get();
+        if (currentUserId) {
+          await channel.track({ user_id: currentUserId, online: true });
+        }
+      }
+    });
+
+    set({ presenceChannel: channel });
   },
 
   setOnlineUsers: (userIds) => set({ onlineUsers: userIds }),
@@ -311,5 +323,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     );
     
     set({ users: updatedUsers });
+  },
+
+  cleanup: () => {
+    const { messageChannel, presenceChannel } = get();
+    if (messageChannel) {
+      supabase.removeChannel(messageChannel);
+    }
+    if (presenceChannel) {
+      supabase.removeChannel(presenceChannel);
+    }
+    set({ messageChannel: null, presenceChannel: null });
   },
 }));
