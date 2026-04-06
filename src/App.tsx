@@ -14,6 +14,7 @@ import Vault from "./pages/Vault";
 import SettingsPage from "./pages/Settings";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import Chat from "./pages/Chat";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/decode" element={<ProtectedLayout><Decode /></ProtectedLayout>} />
             <Route path="/vault" element={<ProtectedLayout><Vault /></ProtectedLayout>} />
             <Route path="/settings" element={<ProtectedLayout><SettingsPage /></ProtectedLayout>} />
+            <Route path="/chat" element={<ProtectedLayout><Chat /></ProtectedLayout>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
