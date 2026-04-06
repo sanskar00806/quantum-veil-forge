@@ -8,11 +8,12 @@ interface Particle {
   speedY: number;
   opacity: number;
   color: string;
+  speedX: number;
 }
 
 export function ParticleBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
+  
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -33,36 +34,75 @@ export function ParticleBackground() {
       "hsl(300, 100%, 50%)",   // magenta
       "hsl(270, 90%, 65%)",    // violet
       "hsl(150, 100%, 50%)",   // green
+      "hsl(185, 100%, 70%)",   // bright cyan
     ];
 
-    const particles: Particle[] = Array.from({ length: 50 }, () => ({
+    const particles: Particle[] = Array.from({ length: 80 }, () => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
-      size: Math.random() * 3 + 1,
-      speedY: Math.random() * 0.5 + 0.2,
-      opacity: Math.random() * 0.5 + 0.2,
+      size: Math.random() * 4 + 0.5,
+      speedY: Math.random() * 0.8 + 0.1,
+      speedX: (Math.random() - 0.5) * 0.3,
+      opacity: Math.random() * 0.6 + 0.1,
       color: colors[Math.floor(Math.random() * colors.length)],
     }));
 
+    let time = 0;
+
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      time += 0.01;
 
-      particles.forEach((particle) => {
+      particles.forEach((particle, index) => {
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-        ctx.fillStyle = particle.color.replace(")", `, ${particle.opacity})`);
+        
+        // Add glow effect
+        const gradient = ctx.createRadialGradient(
+          particle.x, particle.y, 0,
+          particle.x, particle.y, particle.size * 3
+        );
+        gradient.addColorStop(0, particle.color.replace(")", `, ${particle.opacity})`));
+        gradient.addColorStop(1, particle.color.replace(")", ", 0)"));
+        
+        ctx.fillStyle = gradient;
         ctx.fill();
 
         particle.y -= particle.speedY;
-        particle.opacity -= 0.002;
+        particle.x += particle.speedX + Math.sin(time + index) * 0.2;
+        particle.opacity -= 0.0015;
+
+        // Add twinkle effect
+        particle.size += Math.sin(time * 5 + index) * 0.05;
 
         if (particle.y < -10 || particle.opacity <= 0) {
           particle.y = canvas.height + 10;
           particle.x = Math.random() * canvas.width;
-          particle.opacity = Math.random() * 0.5 + 0.2;
-          particle.size = Math.random() * 3 + 1;
+          particle.opacity = Math.random() * 0.6 + 0.1;
+          particle.size = Math.random() * 4 + 0.5;
+          particle.speedX = (Math.random() - 0.5) * 0.3;
         }
       });
+
+      // Draw connecting lines between nearby particles
+      ctx.strokeStyle = "hsl(185, 100%, 55%, 0.05)";
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < 100) {
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.globalAlpha = (1 - distance / 100) * 0.3;
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.globalAlpha = 1;
 
       requestAnimationFrame(animate);
     };
@@ -78,7 +118,7 @@ export function ParticleBackground() {
     <canvas
       ref={canvasRef}
       className="fixed inset-0 pointer-events-none z-0"
-      style={{ opacity: 0.6 }}
+      style={{ opacity: 0.7 }}
     />
   );
 }
