@@ -29,7 +29,7 @@ const Vault = () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from("vault_items")
+        .from("encrypted_files")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
@@ -38,13 +38,13 @@ const Vault = () => {
 
       setVaultItems((data || []).map(item => ({
         id: item.id,
-        file_name: item.file_name,
+        file_name: item.title,
         created_at: item.created_at,
         encryption_method: item.encryption_method || "AES-256+LSB",
-        file_size: item.file_size || 0,
-        file_url: item.file_url,
+        file_size: item.file_size_bytes || 0,
+        file_url: item.encrypted_file_url || undefined,
       })));
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error fetching vault items:", error);
       toast.error("Failed to load vault items");
     } finally {
@@ -67,7 +67,7 @@ const Vault = () => {
 
       window.open(data?.signedUrl, "_blank");
       toast.success("Download started");
-    } catch (error: any) {
+    } catch (error) {
       toast.error("Failed to download file");
     }
   };
@@ -75,7 +75,7 @@ const Vault = () => {
   const handleDelete = async (itemId: string) => {
     try {
       const { error } = await supabase
-        .from("vault_items")
+        .from("encrypted_files")
         .delete()
         .eq("id", itemId);
 
@@ -83,7 +83,7 @@ const Vault = () => {
 
       setVaultItems(prev => prev.filter(item => item.id !== itemId));
       toast.success("Item deleted from vault");
-    } catch (error: any) {
+    } catch (error) {
       toast.error("Failed to delete item");
     }
   };

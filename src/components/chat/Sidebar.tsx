@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, Search, UserPlus, Mail } from "lucide-react";
+import { Users, UserPlus, Mail } from "lucide-react";
 import { useChatStore } from "@/hooks/useChatStore";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,46 +32,40 @@ const Sidebar = () => {
 
     setIsSearching(true);
     try {
-      // Find user by email in auth.users via profiles table
-      const { data: profile, error } = await supabase
+      const { data: profiles, error } = await supabase
         .from('profiles')
-        .select('id, email, full_name, avatar_url')
-        .eq('email', searchEmail.trim().toLowerCase())
-        .single();
+        .select('user_id, email, full_name, avatar_url')
+        .eq('email', searchEmail.trim().toLowerCase());
 
-      if (error || !profile) {
+      if (error) throw error;
+
+      const profile = profiles?.[0];
+      if (!profile) {
         toast.error("No user found with this email address");
-        setIsSearching(false);
         return;
       }
 
-      // Check if it's the current user
-      if (profile.id === currentUserId) {
+      if (profile.user_id === currentUserId) {
         toast.error("You cannot add yourself as a contact");
-        setIsSearching(false);
         return;
       }
 
-      // Check if already in contacts
-      const exists = contacts.some(c => c.id === profile.id);
-      if (exists) {
+      if (contacts.some(c => c.id === profile.user_id)) {
         toast.info("This user is already in your contacts");
-        setIsSearching(false);
         return;
       }
 
-      // Add to contacts
       await addContactByEmail({
-        id: profile.id,
-        email: profile.email,
-        full_name: profile.full_name,
-        avatar_url: profile.avatar_url,
+        id: profile.user_id,
+        email: profile.email || "",
+        full_name: profile.full_name || undefined,
+        avatar_url: profile.avatar_url || undefined,
       });
 
       toast.success(`Added ${profile.email} to contacts`);
       setSearchEmail("");
       setShowAddContact(false);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error adding contact:", error);
       toast.error("Failed to add contact");
     } finally {
@@ -87,12 +81,11 @@ const Sidebar = () => {
           <span className="font-medium text-foreground">Contacts</span>
         </div>
         
-        {/* Add Contact Section */}
         {!showAddContact ? (
           <Button
-            variant="glass-accent"
+            variant="outline"
             size="sm"
-            className="w-full gap-2 text-xs border-glow-cyan"
+            className="w-full gap-2 text-xs border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan/10"
             onClick={() => setShowAddContact(true)}
           >
             <UserPlus className="w-3 h-3" />
@@ -114,9 +107,9 @@ const Sidebar = () => {
             </div>
             <div className="flex gap-2">
               <Button
-                variant="glass-accent"
+                variant="outline"
                 size="sm"
-                className="flex-1 gap-1 text-xs"
+                className="flex-1 gap-1 text-xs border-neon-cyan/30 text-neon-cyan"
                 onClick={handleAddContact}
                 disabled={isSearching}
               >
@@ -126,10 +119,7 @@ const Sidebar = () => {
                 variant="ghost"
                 size="sm"
                 className="flex-1 text-xs"
-                onClick={() => {
-                  setShowAddContact(false);
-                  setSearchEmail("");
-                }}
+                onClick={() => { setShowAddContact(false); setSearchEmail(""); }}
               >
                 Cancel
               </Button>
@@ -152,14 +142,14 @@ const Sidebar = () => {
               onClick={() => setSelectedUser(user)}
               className={`w-full p-3 flex items-center gap-3 rounded-lg transition-colors ${
                 selectedUser?.id === user.id
-                  ? "bg-neon-cyan/10 border-glow-cyan"
+                  ? "bg-neon-cyan/10 border border-neon-cyan/30"
                   : "hover:bg-muted/40"
               }`}
             >
               <div className="relative">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-neon-violet/20 to-neon-cyan/20 border border-border flex items-center justify-center">
                   <span className="text-sm font-semibold text-neon-violet">
-                    {(user.full_name || user.email)[0].toUpperCase()}
+                    {(user.full_name || user.email || "?")[0].toUpperCase()}
                   </span>
                 </div>
                 {user.is_online && (
@@ -168,10 +158,10 @@ const Sidebar = () => {
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <div className="font-medium text-sm text-foreground truncate">
-                  {user.full_name || user.email.split('@')[0]}
+                  {user.full_name || (user.email ? user.email.split('@')[0] : "Unknown")}
                 </div>
                 <div className="text-xs text-muted-foreground truncate">
-                  {user.email}
+                  {user.email || "No email"}
                 </div>
               </div>
             </button>
