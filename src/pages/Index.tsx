@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { Zap, Download, RotateCcw, Sparkles, Lock, Image as ImageIcon, Cpu } from "lucide-react";
+import { Zap, Download, RotateCcw, Sparkles, Lock, Image as ImageIcon, Cpu, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FileUploader } from "@/components/FileUploader";
 import { MessageInput } from "@/components/MessageInput";
@@ -7,6 +7,8 @@ import { EncryptionPipeline, type EncryptionStep } from "@/components/Encryption
 import { OutputGallery } from "@/components/OutputGallery";
 import { motion } from "framer-motion";
 import { GlowingOrb } from "@/components/ParticleBackground";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const Index = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -18,6 +20,7 @@ const Index = () => {
   const [currentStep, setCurrentStep] = useState<EncryptionStep>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleFileSelect = useCallback((f: File | null) => {
     setFile(f);
@@ -58,12 +61,58 @@ const Index = () => {
       const encodedUrl = URL.createObjectURL(blob);
       setEncodedPreview(encodedUrl);
       setIsComplete(true);
+      toast.success("Encoding completed successfully!");
     } catch (err) {
       console.error(err);
-      alert("Encoding failed");
+      toast.error("Encoding failed");
     }
     setIsProcessing(false);
   }, [file, message, password]);
+
+  const handleSaveToVault = async () => {
+    if (!encodedBlob || !file) return;
+    
+    setIsSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please login to save to vault");
+        return;
+      }
+
+      // Upload encoded image to vault storage
+      const fileName = `${user.id}/${Date.now()}-${file.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('vault-files')
+        .upload(fileName, encodedBlob, {
+          cacheControl: '3600',
+          contentType: 'image/png'
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Create vault item record
+      const { error: dbError } = await supabase
+        .from('vault_items')
+        .insert({
+          user_id: user.id,
+          file_name: `encoded_${file.name}`,
+          file_url: fileName,
+          encryption_method: 'AES-256+LSB',
+          file_size: encodedBlob.size,
+          original_file_name: file.name
+        });
+
+      if (dbError) throw dbError;
+
+      toast.success("Saved to vault successfully!");
+    } catch (error: any) {
+      console.error("Failed to save to vault:", error);
+      toast.error("Failed to save to vault");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleExport = () => {
     if (!encodedBlob) return;
@@ -121,20 +170,37 @@ const Index = () => {
 
           <div className="flex items-center gap-2">
             {isComplete && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-              >
-                <Button
-                  variant="glass-accent"
-                  size="sm"
-                  className="gap-1.5 font-mono text-xs border-glow-cyan"
-                  onClick={handleExport}
+              <>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
                 >
-                  <Download className="w-3 h-3" />
-                  Export
-                </Button>
-              </motion.div>
+                  <Button
+                    variant="glass-accent"
+                    size="sm"
+                    className="gap-1.5 font-mono text-xs border-glow-violet"
+                    onClick={handleSaveToVault}
+                    disabled={isSaving}
+                  >
+                    <Save className={`w-3 h-3 ${isSaving ? 'animate-pulse' : ''}`} />
+                    {isSaving ? "Saving..." : "Save to Vault"}
+                  </Button>
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                >
+                  <Button
+                    variant="glass-accent"
+                    size="sm"
+                    className="gap-1.5 font-mono text-xs border-glow-cyan"
+                    onClick={handleExport}
+                  >
+                    <Download className="w-3 h-3" />
+                    Export
+                  </Button>
+                </motion.div>
+              </>
             )}
             <Button
               variant="ghost"
