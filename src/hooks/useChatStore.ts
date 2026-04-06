@@ -21,7 +21,7 @@ export interface ChatUser {
 
 interface ChatState {
   messages: Message[];
-  users: ChatUser[];
+  contacts: ChatUser[];
   selectedUser: ChatUser | null;
   isMessagesLoading: boolean;
   isUsersLoading: boolean;
@@ -32,7 +32,7 @@ interface ChatState {
   
   // Actions
   getCurrentUser: () => Promise<void>;
-  getUsers: () => Promise<void>;
+  getContacts: () => Promise<void>;
   getMessages: (userId: string) => Promise<void>;
   sendMessage: (messageData: { text?: string; image_url?: string; file?: File }) => Promise<void>;
   setSelectedUser: (user: ChatUser | null) => void;
@@ -42,12 +42,13 @@ interface ChatState {
   setOnlineUsers: (userIds: string[]) => void;
   addMessage: (message: Message) => void;
   updateUserOnlineStatus: (userId: string, isOnline: boolean) => void;
+  addContactByEmail: (user: ChatUser) => Promise<void>;
   cleanup: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
-  users: [],
+  contacts: [],
   selectedUser: null,
   isMessagesLoading: false,
   isUsersLoading: false,
@@ -67,12 +68,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  getUsers: async () => {
+  getContacts: async () => {
     set({ isUsersLoading: true });
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Get all other users as potential contacts
       const { data, error } = await supabase
         .from("profiles")
         .select("id, email, full_name, avatar_url")
@@ -81,7 +83,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (error) throw error;
       
       set({ 
-        users: (data || []).map(profile => ({
+        contacts: (data || []).map(profile => ({
           id: profile.id,
           email: profile.email,
           full_name: profile.full_name,
@@ -90,7 +92,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }))
       });
     } catch (error: any) {
-      console.error("Error fetching users:", error);
+      console.error("Error fetching contacts:", error);
     } finally {
       set({ isUsersLoading: false });
     }
@@ -196,6 +198,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Load messages for selected user
     if (selectedUser) {
       get().getMessages(selectedUser.id);
+      // Subscribe to realtime updates for this conversation
+      setTimeout(() => get().subscribeToMessages(), 100);
     }
   },
 
@@ -208,7 +212,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       supabase.removeChannel(messageChannel);
     }
 
-    // Subscribe to new messages
+    // Subscribe to new messages with realtime
     const channel = supabase
       .channel(`chat:${currentUserId}:${selectedUser.id}`)
       .on(
@@ -266,13 +270,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const onlineUserIds = Object.keys(state);
       set({ onlineUsers: onlineUserIds });
       
-      // Update users with online status
-      const { users } = get();
-      const updatedUsers = users.map(user => ({
-        ...user,
-        is_online: onlineUserIds.includes(user.id)
+      // Update contacts with online status
+      const { contacts } = get();
+      const updatedContacts = contacts.map(contact => ({
+        ...contact,
+        is_online: onlineUserIds.includes(contact.id)
       }));
-      set({ users: updatedUsers });
+      set({ contacts: updatedContacts });
     })
     .on('presence', { event: 'join' }, ({ key, newPresences }) => {
       console.log('User joined:', key, newPresences);
@@ -308,7 +312,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   updateUserOnlineStatus: (userId: string, isOnline: boolean) => {
-    const { users, onlineUsers } = get();
+    const { contacts, onlineUsers } = get();
     
     // Update online users list
     const newOnlineUsers = isOnline 
@@ -317,12 +321,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     
     set({ onlineUsers: newOnlineUsers });
     
-    // Update user's online status in users list
-    const updatedUsers = users.map(user => 
-      user.id === userId ? { ...user, is_online: isOnline } : user
+    // Update contact's online status
+    const updatedContacts = contacts.map(contact => 
+      contact.id === userId ? { ...contact, is_online: isOnline } : contact
     );
     
-    set({ users: updatedUsers });
+    set({ contacts: updatedContacts });
+  },
+
+  addContactByEmail: async (user: ChatUser) => {
+    const { contacts } = get();
+    // Add to contacts list (it's already there from getContacts, but this ensures it's refreshed)
+    const exists = contacts.some(c => c.id === user.id);
+    if (!exists) {
+      set({ contacts: [...contacts, user] });
+    }
+    // Refresh contacts list
+    await get().getContacts();
   },
 
   cleanup: () => {
