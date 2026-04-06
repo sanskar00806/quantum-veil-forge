@@ -68,7 +68,23 @@ const SettingsPage = () => {
     
     setLoading(true);
     try {
-      const { error } = await supabase
+      console.log('Saving settings with payload:', {
+        user_id: user.id,
+        encryption_level: settings.encryptionLevel,
+        auto_save: settings.autoSave,
+        notifications: settings.notifications,
+        dark_mode: settings.darkMode,
+        language: settings.language,
+        two_factor_auth: settings.twoFactorAuth,
+        session_timeout: settings.sessionTimeout,
+        max_file_size: settings.maxFileSize,
+        compress_images: settings.compressImages,
+        backup_frequency: settings.backupFrequency,
+        theme_color: settings.themeColor,
+        font_size: settings.fontSize,
+      });
+
+      const { data, error } = await supabase
         .from("user_settings")
         .upsert({
           user_id: user.id,
@@ -85,13 +101,20 @@ const SettingsPage = () => {
           theme_color: settings.themeColor,
           font_size: settings.fontSize,
           updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id'
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
       
+      console.log('Settings saved successfully:', data);
       toast.success("Settings saved successfully");
     } catch (error: any) {
-      toast.error("Failed to save settings");
+      console.error('Full error details:', error);
+      toast.error(`Failed to save settings: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
