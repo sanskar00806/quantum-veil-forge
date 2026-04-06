@@ -44,11 +44,11 @@ const SettingsPage = () => {
 
       if (data) {
         setSettings({
-          encryptionLevel: data.encryption_level || "AES-256",
-          autoSave: data.auto_save ?? true,
-          notifications: data.notifications ?? true,
-          darkMode: data.dark_mode ?? true,
-          language: data.language || "en",
+          encryptionLevel: "AES-256",
+          autoSave: true,
+          notifications: true,
+          darkMode: data.theme === 'dark',
+          language: "en",
           twoFactorAuth: data.two_factor_auth ?? false,
           sessionTimeout: data.session_timeout || 30,
           maxFileSize: data.max_file_size || 100,
