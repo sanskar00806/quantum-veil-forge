@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { MessageSquare } from "lucide-react";
 import { motion } from "framer-motion";
 import Sidebar from "@/components/chat/Sidebar";
@@ -6,8 +7,19 @@ import ChatContainer from "@/components/chat/ChatContainer";
 import { useChatStore } from "@/hooks/useChatStore";
 
 const Chat = () => {
-  const { selectedUser } = useChatStore();
-
+  const { selectedUser, getCurrentUser, setupPresenceSubscription, cleanup } = useChatStore();
+  
+  useEffect(() => {
+    // Initialize current user and presence
+    getCurrentUser();
+    setupPresenceSubscription();
+    
+    // Cleanup on unmount
+    return () => {
+      cleanup();
+    };
+  }, [getCurrentUser, setupPresenceSubscription, cleanup]);
+  
   return (
     <div className="flex-1 flex min-h-screen overflow-hidden grid-bg">
       <header className="absolute top-0 left-0 right-0 px-6 py-4 border-b border-border/30 glass-strong z-20">
@@ -18,7 +30,7 @@ const Chat = () => {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Secure Chat</h2>
             <p className="text-xs text-muted-foreground font-mono">
-              End-to-end encrypted messaging
+              End-to-end encrypted messaging with real-time sync
             </p>
           </div>
         </div>
