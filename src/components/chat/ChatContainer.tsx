@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Download } from "lucide-react";
 import { useChatStore } from "@/hooks/useChatStore";
 import { useAuth } from "@/contexts/AuthContext";
 import ChatHeader from "./ChatHeader";
@@ -58,11 +59,23 @@ const ChatContainer = () => {
                   }`}
                 >
                   {message.image_url && (
-                    <img
-                      src={message.image_url}
-                      alt="Attachment"
-                      className="rounded-md mb-2 max-w-full"
-                    />
+                    <div className="relative group">
+                      <img
+                        src={message.image_url}
+                        alt="Attachment"
+                        className="rounded-md mb-2 max-w-full"
+                      />
+                      <a
+                        href={message.image_url}
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute top-2 right-2 p-1.5 rounded-md bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                        title="Download image"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                    </div>
                   )}
                   {message.text && (
                     <p className="text-sm text-foreground">{message.text}</p>
