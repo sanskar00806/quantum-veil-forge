@@ -126,13 +126,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (error) throw error;
       
       set({ 
-        messages: (data || []).map(msg => ({
-          id: msg.id,
-          sender_id: msg.sender_id,
-          receiver_id: msg.receiver_id,
-          text: msg.content,
-          created_at: msg.created_at || new Date().toISOString(),
-        }))
+        messages: (data || []).map(msg => {
+          const parsed = parseContent(msg.content);
+          return {
+            id: msg.id,
+            sender_id: msg.sender_id,
+            receiver_id: msg.receiver_id,
+            text: parsed.text,
+            image_url: parsed.image_url,
+            created_at: msg.created_at || new Date().toISOString(),
+          };
+        })
       });
     } catch (error) {
       console.error("Error fetching messages:", error);
@@ -191,11 +195,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (error) throw error;
 
       if (data) {
+        const parsed = parseContent(data.content);
         const newMsg: Message = {
           id: data.id,
           sender_id: data.sender_id,
           receiver_id: data.receiver_id,
-          text: data.content,
+          text: parsed.text,
+          image_url: parsed.image_url,
           created_at: data.created_at || new Date().toISOString(),
         };
         set({ messages: [...get().messages, newMsg] });
@@ -237,11 +243,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         (payload) => {
           const raw = payload.new as any;
+          const parsed = parseContent(raw.content);
           const newMessage: Message = {
             id: raw.id,
             sender_id: raw.sender_id,
             receiver_id: raw.receiver_id,
-            text: raw.content,
+            text: parsed.text,
+            image_url: parsed.image_url,
             created_at: raw.created_at || new Date().toISOString(),
           };
           const exists = get().messages.some(m => m.id === newMessage.id);
