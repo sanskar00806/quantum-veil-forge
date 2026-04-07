@@ -24,6 +24,14 @@ function getRoomId(userA: string, userB: string): string {
   return [userA, userB].sort().join("_");
 }
 
+// Parse content to extract image URLs and clean text
+function parseContent(content: string): { text?: string; image_url?: string } {
+  const imageMatch = content.match(/\[image:(.*?)\]/);
+  const image_url = imageMatch ? imageMatch[1] : undefined;
+  const text = content.replace(/\[image:.*?\]/g, "").trim() || undefined;
+  return { text, image_url };
+}
+
 interface ChatState {
   messages: Message[];
   contacts: ChatUser[];
